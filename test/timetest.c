@@ -43,17 +43,6 @@ int main (int argc, char **argv) {
     struct stat buf;
 #endif
 
-    time(&now);
-    printf("time()         : Current date and time: %s", ctime(&now));
-    printf("time(NULL)     : Seconds since Epoch  : %u\n", (unsigned int)time(NULL));
-
-    ftime(&tb);
-    printf("ftime()        : Current date and time: %s", ctime(&tb.time));
-
-    printf("(Intentionally sleeping 2 seconds...)\n");
-    fflush(stdout);
-    sleep(2);
-
     gettimeofday(&tv, NULL);
     printf("gettimeofday() : Current date and time: %s", ctime(&tv.tv_sec));
 
@@ -61,6 +50,22 @@ int main (int argc, char **argv) {
     clock_gettime(CLOCK_REALTIME, &ts);
     printf("clock_gettime(): Current date and time: %s", ctime(&ts.tv_sec));
 #endif
+
+    printf("(Intentionally sleeping 2 seconds...)\n");
+    fflush(stdout);
+#ifdef __APPLE__
+    sleep(2);
+#else
+    ts.tv_sec += 2;
+    clock_nanosleep(CLOCK_REALTIME, TIMER_ABSTIME, &ts, NULL);
+#endif
+
+    time(&now);
+    printf("time()         : Current date and time: %s", ctime(&now));
+    printf("time(NULL)     : Seconds since Epoch  : %u\n", (unsigned int)time(NULL));
+
+    ftime(&tb);
+    printf("ftime()        : Current date and time: %s", ctime(&tb.time));
 
 #ifdef FAKE_STAT
     lstat(argv[0], &buf);

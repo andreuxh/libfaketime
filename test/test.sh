@@ -27,6 +27,11 @@ echo "LD_PRELOAD=../src/libfaketime.so.1 FAKETIME=\"-10d\" ./timetest"
 LD_PRELOAD=../src/libfaketime.so.1 FAKETIME="-10d" ./timetest
 echo
 
+echo "Running the test program with 10 days positive offset specified"
+echo "LD_PRELOAD=../src/libfaketime.so.1 FAKETIME=\"+10d\" ./timetest"
+LD_PRELOAD=../src/libfaketime.so.1 FAKETIME="+10d" ./timetest
+echo
+
 echo "Running the test program with 10 days negative offset specified, and FAKE_STAT disabled"
 echo "\$ LD_PRELOAD=../src/libfaketime.so.1 FAKETIME=\"-10d\" NO_FAKE_STAT=1 ./timetest"
 LD_PRELOAD=../src/libfaketime.so.1 FAKETIME="-10d" NO_FAKE_STAT=1 ./timetest

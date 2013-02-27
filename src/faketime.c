@@ -23,6 +23,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <string.h>
+#include <errno.h>
 
 /* pthread-handling contributed by David North, TDI in version 0.7 */
 #ifdef PTHREAD
@@ -525,6 +526,7 @@ int gettimeofday(struct timeval *tv, void *tz) {
 
     /* sanity check */
     if (tv == NULL) {
+        errno = EFAULT;
         return -1;
     }
 
@@ -564,6 +566,7 @@ int clock_gettime(clockid_t clk_id, struct timespec *tp) {
 
     /* sanity check */
     if (tp == NULL) {
+        errno = EFAULT;
         return -1;
     }
 
@@ -590,6 +593,104 @@ int clock_gettime(clockid_t clk_id, struct timespec *tp) {
 
     /* pass the real current time to our faking version, overwriting it */
     result = fake_clock_gettime(clk_id, tp);
+
+    /* return the result to the caller */
+    return result;
+}
+
+int clock_nanosleep(clockid_t clk_id, int flags,
+                    const struct timespec *rqtp,
+                    struct timespec *rmtp)
+{
+    static int (*real_clock_nanosleep)(clockid_t clk_id, int flags,
+                                       const struct timespec *rqtp,
+                                       struct timespec *rmtp);
+    static int has_real_clock_nanosleep = 0;
+    int result;
+
+    /* sanity check */
+    if (rqtp == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
+    /* Check whether we've got a pointer to the real clock_nanosleep() function yet */
+    SINGLE_IF(has_real_clock_nanosleep==0)
+        real_clock_nanosleep = NULL;
+        real_clock_nanosleep = dlsym(RTLD_NEXT, "clock_nanosleep");
+
+        /* check whether dlsym() worked */
+        if (dlerror() == NULL) {
+            has_real_clock_nanosleep = 1;
+        }
+    END_SINGLE_IF
+    if (!has_real_clock_nanosleep) {  /* dlsym() failed */
+#ifdef DEBUG
+            (void) fprintf(stderr, "faketime problem: original clock_nanosleep() not found.\n");
+#endif
+            return -1; /* propagate error to caller */
+    }
+
+    /* adjust requested time */
+    /* NB: will fail with speedup/slowdown */
+    struct timespec fake_rqtp = *rqtp;
+    if (flags == TIMER_ABSTIME) {
+        time_t timeadj = 0;
+        fake_rqtp.tv_sec -= fake_time(&timeadj);
+    }
+
+    /* call original function */
+    result = (*real_clock_nanosleep)(clk_id, flags, &fake_rqtp, rmtp);
+    if (result == -1) return result; /* original function failed */
+
+    /* return the result to the caller */
+    return result;
+}
+#endif
+
+#ifdef PTHREAD
+int pthread_cond_timedwait(pthread_cond_t *cond,
+                           pthread_mutex_t *mutex,
+                           const struct timespec *abstime)
+{
+    static int (*real_pthread_cond_timedwait)(pthread_cond_t *cond,
+                                              pthread_mutex_t *mutex,
+                                              const struct timespec *abstime);
+    static int has_real_pthread_cond_timedwait = 0;
+    int result;
+
+    /* sanity check */
+    if (abstime == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
+    /* Check whether we've got a pointer to the real pthread_cond_timedwait() function yet */
+    SINGLE_IF(has_real_pthread_cond_timedwait==0)
+        real_pthread_cond_timedwait = NULL;
+        real_pthread_cond_timedwait = dlsym(RTLD_NEXT, "pthread_cond_timedwait");
+
+        /* check whether dlsym() worked */
+        if (dlerror() == NULL) {
+            has_real_pthread_cond_timedwait = 1;
+        }
+    END_SINGLE_IF
+    if (!has_real_pthread_cond_timedwait) {  /* dlsym() failed */
+#ifdef DEBUG
+            (void) fprintf(stderr, "faketime problem: original pthread_cond_timedwait() not found.\n");
+#endif
+            return -1; /* propagate error to caller */
+    }
+
+    /* adjust requested time */
+    /* NB: will fail with speedup/slowdown */
+    struct timespec fake_abstime = *abstime;
+    time_t timeadj = 0;
+    fake_abstime.tv_sec -= fake_time(&timeadj);
+
+    /* call original function */
+    result = (*real_pthread_cond_timedwait)(cond, mutex, &fake_abstime);
+    if (result == -1) return result; /* original function failed */
 
     /* return the result to the caller */
     return result;
@@ -930,6 +1031,21 @@ int __gettimeofday(struct timeval *tv, void *tz) {
 #ifdef POSIX_REALTIME
 int __clock_gettime(clockid_t clk_id, struct timespec *tp) {
     return clock_gettime(clk_id, tp);
+}
+
+int __clock_nanosleep(clockid_t clk_id, int flags,
+                      const struct timespec *rqtp,
+                      struct timespec *rmtp)
+{
+    return clock_nanosleep(clk_id, flags, rqtp, rmtp);
+}
+#endif
+
+#ifdef PTHREAD
+int __pthread_cond_timedwait(pthread_cond_t *cond, pthread_mutex_t *mutex,
+                             const struct timespec *abstime)
+{
+    return pthread_cond_timedwait(cond, mutex, abstime);
 }
 #endif
 
